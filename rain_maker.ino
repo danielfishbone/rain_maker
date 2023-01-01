@@ -8,6 +8,8 @@
  
 #define DEFAULT_POWER_MODE true
 #define DEFAULT_DIMMER_LEVEL 50
+#define MIN_BRIGHTNESS 0
+#define MAX_BRIGHTNESS 255
 const char *service_name = "PROV_1234";
 const char *pop = "abcd1234";
 
@@ -17,28 +19,26 @@ static int gpio_0 = 9;
 static int gpio_dimmer = 7;
 #else
 //GPIO for virtual device
-static int gpio_0 = 0;
+static int gpio_0 = 5;
 static int gpio_dimmer = 16;
 #endif
 
-bool dimmer_state = true;
+bool dimmer_state = false;
 int brightness = DEFAULT_DIMMER_LEVEL;
-//byte prevBrightness = 0;
-//byte newBrightness = 0;
+long newBrightness = DEFAULT_DIMMER_LEVEL;
 byte brightnessTolerance = 5;
-const int freq = 20000;    //setting frequency
+const int freq = 5000;    //setting frequency
 const int resolution = 8;    // using 8 bit resolution (this has a max value of 255)
 const int ledChannel = 0;
-const int ledPin = 2;
-const int timeout = 500;
-int pot = 15;
+const int ledPin = 18;
+const int timeout = 200;
 unsigned long timestamp =0;
 boolean changeFlag = false;
 
 ESP32Encoder encoder;
 // The framework provides some standard device types like switch, lightbulb, fan, temperature sensor.
 // But, you can also define custom devices using the 'Device' base class object, as shown here
-static Device my_device("Dimmer", "custom.device.dimmer", &gpio_dimmer);
+static Device my_device("LightBulb", "custom.device.dimmer", &gpio_dimmer);
 
 void sysProvEvent(arduino_event_t *sys_event)
 {
@@ -74,7 +74,10 @@ void write_callback(Device *device, Param *param, const param_val_t val, void *p
         param->updateAndReport(val);
     } else if (strcmp(param_name, "Level") == 0) {
         Serial.printf("\nReceived value = %d for %s - %s\n", val.val.i, device_name, param_name);
-        brightness = val.val.i;
+        newBrightness = val.val.i;
+        encoder.setCount(newBrightness);
+        Serial.printf("new brightness : %d", newBrightness);
+        updateSteps();
         param->updateAndReport(val);
     }
 }
@@ -100,7 +103,7 @@ void setup()
 
     //Create and add a custom level parameter
     Param level_param("Level", "custom.param.level", value(DEFAULT_DIMMER_LEVEL), PROP_FLAG_READ | PROP_FLAG_WRITE);
-    level_param.addBounds(value(0), value(255), value(1));
+    level_param.addBounds(value(MIN_BRIGHTNESS ), value(MAX_BRIGHTNESS ), value(1));
     level_param.addUIType(ESP_RMAKER_UI_SLIDER);
     my_device.addParam(level_param);
 
@@ -128,16 +131,9 @@ void setup()
 }
 
 void loop(){
-  long newBrightness = encoder.getCount();
-  if(newBrightness >= 255){
-    encoder.setCount(255);
-    newBrightness = 255;
-  }
-  else if(newBrightness <= 0){
-    encoder.setCount(0);
-    newBrightness = 0;
-    }
-  Serial.println(newBrightness);
+   newBrightness = encoder.getCount();
+   updateSteps();
+
     if(digitalRead(gpio_0) == LOW) { //Push button pressed
 
         // Key debounce handling
@@ -154,32 +150,42 @@ void loop(){
           Serial.printf("Reset Wi-Fi.\n");
           // If key pressed for more than 3secs, but less than 10, reset Wi-Fi
           RMakerWiFiReset(2);
-        } else {
+        }
+      else {
           // Toggle device state
           dimmer_state = !dimmer_state;
           update_stat();
-          brightness +=10;
       }
     }
-    delay(100);
-    ledcWrite(ledChannel,brightness); 
+   if(dimmer_state){
+    ledcWrite(ledChannel,brightness); }
+    else{ledcWrite(ledChannel,MIN_BRIGHTNESS );}
     if (newBrightness != brightness){
       changeFlag = true;
       brightness = newBrightness;
       timestamp = millis();
-      Serial.println("Changed");
+      updateSteps();
       }
     if (millis() - timestamp >= timeout && changeFlag ==true) {
       update_stat();
       changeFlag = false;
       } 
-    
+     delay(100);
+   
 }
 void update_stat(){
           my_device.updateAndReportParam("Level", brightness);
           Serial.printf("Toggle State to %s.\n", dimmer_state ? "true" : "false");
           Serial.printf("Brightness State to %d.\n", brightness);
           my_device.updateAndReportParam(ESP_RMAKER_DEF_POWER_NAME, dimmer_state);
-          (dimmer_state == false) ? digitalWrite(gpio_dimmer, LOW) : digitalWrite(gpio_dimmer, HIGH);
-         
   }
+void updateSteps(){
+  if(newBrightness >= MAX_BRIGHTNESS ){
+    encoder.setCount(MAX_BRIGHTNESS );
+    newBrightness = MAX_BRIGHTNESS ;
+  }
+  else if(newBrightness <= MIN_BRIGHTNESS ){
+    encoder.setCount(MIN_BRIGHTNESS );
+    newBrightness = MIN_BRIGHTNESS ;
+    }
+  }  
