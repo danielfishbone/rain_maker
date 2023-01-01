@@ -2,7 +2,10 @@
 #include "RMaker.h"
 #include "WiFi.h"
 #include "WiFiProv.h"
-
+#include <ESP32Encoder.h>
+#define CLK 4 // CLK ENCODER 
+#define DT 15 // DT ENCODER 
+ 
 #define DEFAULT_POWER_MODE true
 #define DEFAULT_DIMMER_LEVEL 50
 const char *service_name = "PROV_1234";
@@ -19,11 +22,20 @@ static int gpio_dimmer = 16;
 #endif
 
 bool dimmer_state = true;
-byte brightness = DEFAULT_DIMMER_LEVEL;
+int brightness = DEFAULT_DIMMER_LEVEL;
+//byte prevBrightness = 0;
+//byte newBrightness = 0;
+byte brightnessTolerance = 5;
 const int freq = 20000;    //setting frequency
 const int resolution = 8;    // using 8 bit resolution (this has a max value of 255)
 const int ledChannel = 0;
 const int ledPin = 2;
+const int timeout = 500;
+int pot = 15;
+unsigned long timestamp =0;
+boolean changeFlag = false;
+
+ESP32Encoder encoder;
 // The framework provides some standard device types like switch, lightbulb, fan, temperature sensor.
 // But, you can also define custom devices using the 'Device' base class object, as shown here
 static Device my_device("Dimmer", "custom.device.dimmer", &gpio_dimmer);
@@ -70,6 +82,8 @@ void write_callback(Device *device, Param *param, const param_val_t val, void *p
 void setup()
 {
     Serial.begin(115200);
+    encoder.attachHalfQuad ( DT, CLK );
+    encoder.setCount ( DEFAULT_DIMMER_LEVEL );
     pinMode(gpio_0, INPUT);
     pinMode(gpio_dimmer, OUTPUT);
     pinMode(ledPin, OUTPUT);
@@ -97,10 +111,6 @@ void setup()
 
     //This is optional
     RMaker.enableOTA(OTA_USING_TOPICS);
-    //If you want to enable scheduling, set time zone for your region using setTimeZone().
-    //The list of available values are provided here https://rainmaker.espressif.com/docs/time-service.html
-    // RMaker.setTimeZone("Asia/Shanghai");
-    // Alternatively, enable the Timezone service and let the phone apps set the appropriate timezone
     RMaker.enableTZService();
 
     RMaker.enableSchedule();
@@ -117,8 +127,17 @@ void setup()
 #endif
 }
 
-void loop()
-{
+void loop(){
+  long newBrightness = encoder.getCount();
+  if(newBrightness >= 255){
+    encoder.setCount(255);
+    newBrightness = 255;
+  }
+  else if(newBrightness <= 0){
+    encoder.setCount(0);
+    newBrightness = 0;
+    }
+  Serial.println(newBrightness);
     if(digitalRead(gpio_0) == LOW) { //Push button pressed
 
         // Key debounce handling
@@ -138,18 +157,29 @@ void loop()
         } else {
           // Toggle device state
           dimmer_state = !dimmer_state;
-          my_device.updateAndReportParam("Level", brightness);
-          Serial.printf("Toggle State to %s.\n", dimmer_state ? "true" : "false");
-          my_device.updateAndReportParam(ESP_RMAKER_DEF_POWER_NAME, dimmer_state);
-          (dimmer_state == false) ? digitalWrite(gpio_dimmer, LOW) : digitalWrite(gpio_dimmer, HIGH);
-         
+          update_stat();
           brightness +=10;
       }
     }
     delay(100);
     ledcWrite(ledChannel,brightness); 
+    if (newBrightness != brightness){
+      changeFlag = true;
+      brightness = newBrightness;
+      timestamp = millis();
+      Serial.println("Changed");
+      }
+    if (millis() - timestamp >= timeout && changeFlag ==true) {
+      update_stat();
+      changeFlag = false;
+      } 
+    
 }
 void update_stat(){
-            my_device.updateAndReportParam("Level", brightness);
- 
+          my_device.updateAndReportParam("Level", brightness);
+          Serial.printf("Toggle State to %s.\n", dimmer_state ? "true" : "false");
+          Serial.printf("Brightness State to %d.\n", brightness);
+          my_device.updateAndReportParam(ESP_RMAKER_DEF_POWER_NAME, dimmer_state);
+          (dimmer_state == false) ? digitalWrite(gpio_dimmer, LOW) : digitalWrite(gpio_dimmer, HIGH);
+         
   }
