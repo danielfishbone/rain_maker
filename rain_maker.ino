@@ -38,7 +38,8 @@ boolean changeFlag = false;
 ESP32Encoder encoder;
 // The framework provides some standard device types like switch, lightbulb, fan, temperature sensor.
 // But, you can also define custom devices using the 'Device' base class object, as shown here
-static Device my_device("LightBulb", "custom.device.dimmer", &gpio_dimmer);
+static LightBulb my_device("Bulb", &gpio_dimmer);
+//static Device my_device("LightBulb", "custom.device.dimmer", &gpio_dimmer);
 
 void sysProvEvent(arduino_event_t *sys_event)
 {
