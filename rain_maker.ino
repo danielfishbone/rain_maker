@@ -134,7 +134,7 @@ void loop(){
 
     if(digitalRead(gpio_0) == LOW) { // if Push button pressed
 
-        // Key debounce handling
+        // Key debounce handling 
         delay(100);
         int startTime = millis();
         while(digitalRead(gpio_0) == LOW) delay(50);
@@ -202,3 +202,4 @@ void updateSteps(){ // this updates the encoder steps and keep it within boundar
     newBrightness = MIN_BRIGHTNESS ;
     }
   }  
+ 
