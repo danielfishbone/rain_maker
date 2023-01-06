@@ -16,3 +16,5 @@ Step 4:
 go to;
 tools tab >> board and select your esp32 board 
 tools >> Partition Scheme >> RainMaker
+
+>> upload the code 
