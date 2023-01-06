@@ -1,0 +1,18 @@
+Step 1:
+install the arduino ide from https://www.arduino.cc/ (this was tested n the arduino ide 1.8.x)
+
+Step 2:
+install or update the Esp32 boards v2.0
+go to file >> preferences  or click "ctrl" + ","
+add the following url in the additional boards manager URLs 
+https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+
+click OK to confirm
+Step 3: 
+go to the tools tab >> boards >> boards manager 
+search for esp32 install or update to v2.0.x 
+
+Step 4:
+go to;
+tools tab >> board and select your esp32 board 
+tools >> Partition Scheme >> RainMaker
