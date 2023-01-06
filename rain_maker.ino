@@ -1,4 +1,3 @@
-//This example demonstrates the ESP RainMaker with a custom device
 #include "RMaker.h"
 #include "WiFi.h"
 #include "WiFiProv.h"
@@ -13,33 +12,31 @@
 const char *service_name = "PROV_1234";
 const char *pop = "abcd1234";
 
-//GPIO for push button
-#if CONFIG_IDF_TARGET_ESP32C3
-static int gpio_0 = 9;
-static int gpio_dimmer = 7;
-#else
+
 //GPIO for virtual device
 static int gpio_0 = 5;
 static int gpio_dimmer = 16;
-#endif
 
-bool dimmer_state = false;
+
+bool switch_state = false;
 int brightness = DEFAULT_DIMMER_LEVEL;
 long newBrightness = DEFAULT_DIMMER_LEVEL;
+
 byte brightnessTolerance = 5;
-const int freq = 5000;    //setting frequency
+
+//***********************************parameters for the pwm for LED
+const int freq = 1000;        //setting frequency
 const int resolution = 8;    // using 8 bit resolution (this has a max value of 255)
-const int ledChannel = 0;
-const int ledPin = 18;
-const int timeout = 200;
+const int ledChannel = 0; 
+
+const int ledPin = 18;      //  r  the output pin
+const int timeout = 200;    //  a little delay after you turn the potentiometer 
 unsigned long timestamp =0;
 boolean changeFlag = false;
-
-ESP32Encoder encoder;
+ ESP32Encoder encoder;
 // The framework provides some standard device types like switch, lightbulb, fan, temperature sensor.
 // But, you can also define custom devices using the 'Device' base class object, as shown here
 static LightBulb my_device("Bulb", &gpio_dimmer);
-//static Device my_device("LightBulb", "custom.device.dimmer", &gpio_dimmer);
 
 void sysProvEvent(arduino_event_t *sys_event)
 {
@@ -70,8 +67,8 @@ void write_callback(Device *device, Param *param, const param_val_t val, void *p
 
     if(strcmp(param_name, "Power") == 0) {
         Serial.printf("Received value = %s for %s - %s\n", val.val.b? "true" : "false", device_name, param_name);
-        dimmer_state = val.val.b;
-        (dimmer_state == false) ? digitalWrite(gpio_dimmer, LOW) : digitalWrite(gpio_dimmer, HIGH);
+        switch_state = val.val.b;
+        //(switch_state == false) ? digitalWrite(gpio_dimmer, LOW) : digitalWrite(gpio_dimmer, HIGH);
         param->updateAndReport(val);
     } else if (strcmp(param_name, "Level") == 0) {
         Serial.printf("\nReceived value = %d for %s - %s\n", val.val.i, device_name, param_name);
@@ -85,10 +82,10 @@ void write_callback(Device *device, Param *param, const param_val_t val, void *p
 
 void setup()
 {
-    Serial.begin(115200);
-    encoder.attachHalfQuad ( DT, CLK );
-    encoder.setCount ( DEFAULT_DIMMER_LEVEL );
-    pinMode(gpio_0, INPUT);
+    Serial.begin(115200); //bedin Serial communication
+    encoder.attachHalfQuad ( DT, CLK ); //initialize encoder object
+    encoder.setCount ( DEFAULT_DIMMER_LEVEL ); // set initial brightness level of the LED 
+    pinMode(gpio_0, INPUT); 
     pinMode(gpio_dimmer, OUTPUT);
     pinMode(ledPin, OUTPUT);
     digitalWrite(gpio_dimmer, DEFAULT_POWER_MODE);
@@ -110,7 +107,7 @@ void setup()
 
     my_device.addCb(write_callback);
 
-    //Add custom dimmer device to the node
+    //Add custom LightBulb device to the node
     my_node.addDevice(my_device);
 
     //This is optional
@@ -135,7 +132,7 @@ void loop(){
    newBrightness = encoder.getCount();
    updateSteps();
 
-    if(digitalRead(gpio_0) == LOW) { //Push button pressed
+    if(digitalRead(gpio_0) == LOW) { // if Push button pressed
 
         // Key debounce handling
         delay(100);
@@ -154,33 +151,48 @@ void loop(){
         }
       else {
           // Toggle device state
-          dimmer_state = !dimmer_state;
+          switch_state = !switch_state;
           update_stat();
       }
     }
-   if(dimmer_state){
-    ledcWrite(ledChannel,brightness); }
-    else{ledcWrite(ledChannel,MIN_BRIGHTNESS );}
-    if (newBrightness != brightness){
-      changeFlag = true;
+   //******************************************************
+   // switch logic comes here 
+  // here, the switch state reflects the on or off status of the light bulb device (or on,off in the app)
+  // brightness reflects the the  level (this changes with rotation of the the encoder or slider in the app)
+
+   if(switch_state){ // if the switch is on (in the app or if the encoder button is toggled)
+    ledcWrite(ledChannel,brightness); 
+    }
+
+    else{
+      ledcWrite(ledChannel,0);
+      }
+    if (newBrightness != brightness){ // when the brightness value gotten from the app is not equal to 
+                                      // the current brightness value 
+      changeFlag = true;              // set change flag to true (this'll be used later to synchronize the parameters)
       brightness = newBrightness;
       timestamp = millis();
-      updateSteps();
+      updateSteps();// this updates the encoder steps 
       }
     if (millis() - timestamp >= timeout && changeFlag ==true) {
-      update_stat();
-      changeFlag = false;
+      update_stat();// this function synchronizes device status with app 
+      
+      // this flag helps to keep track of when parameters change , 
+      //so it'll only update when parameters change
+      changeFlag = false; 
       } 
+
+    //************************************************************  
      delay(100);
    
 }
-void update_stat(){
-          my_device.updateAndReportParam("Level", brightness);
-          Serial.printf("Toggle State to %s.\n", dimmer_state ? "true" : "false");
+void update_stat(){// this function synchronizes device status with app 
+          my_device.updateAndReportParam("Level", brightness); // update adpp with current brightness level
+          Serial.printf("Toggle State to %s.\n", switch_state ? "true" : "false");
           Serial.printf("Brightness State to %d.\n", brightness);
-          my_device.updateAndReportParam(ESP_RMAKER_DEF_POWER_NAME, dimmer_state);
+          my_device.updateAndReportParam(ESP_RMAKER_DEF_POWER_NAME, switch_state);// update adpp with current switch
   }
-void updateSteps(){
+void updateSteps(){ // this updates the encoder steps and keep it within boundaries 
   if(newBrightness >= MAX_BRIGHTNESS ){
     encoder.setCount(MAX_BRIGHTNESS );
     newBrightness = MAX_BRIGHTNESS ;
